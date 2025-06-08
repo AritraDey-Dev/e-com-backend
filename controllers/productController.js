@@ -2,6 +2,16 @@ const Product = require('../models/productModel');
 const ErrorHandler = require('../utils/ErrorHandler');
 const catchAsyncError = require('../middleware/CatchAsyncErrors');
 const cloudinary = require('../config/cloudinary');
+const { categories } = require('../constants/categories');
+
+// Get all categories
+exports.getAllCategories = catchAsyncError(async (req, res) => {
+  res.set('Cache-Control', 'public, max-age=768000, immutable');
+  res.status(200).json({
+    success: true,
+    data: categories,
+  });
+})
 
 // create a new product
 exports.createProduct = catchAsyncError(async (req, res, next) => {
@@ -76,7 +86,18 @@ exports.deleteProduct = catchAsyncError(async (req, res, next) => {
 
 // send all product details
 exports.getAllProducts = catchAsyncError(async (req, res) => {
-  const products = await Product.find();
+  const q = new URLSearchParams(req.url.split('?').pop())
+  
+  const category = q.get('category')
+
+  let products
+
+  if (category) {
+    products = await Product.find({ category: { $regex: new RegExp(category, 'i') } }).sort({ createdAt: -1 })
+  } else {
+    products = await Product.find().sort({ createdAt: -1 })
+  }
+  
   const data = products.map((item, index) => {
     const {
       _id: id,
@@ -84,6 +105,7 @@ exports.getAllProducts = catchAsyncError(async (req, res) => {
       price,
       images,
       colors,
+      sizes,
       company,
       description,
       category,
@@ -95,8 +117,9 @@ exports.getAllProducts = catchAsyncError(async (req, res) => {
       id,
       name,
       price,
-      image: images[0].url,
+      images,
       colors,
+      sizes,
       company,
       description,
       category,
@@ -121,9 +144,25 @@ exports.getSingleProduct = catchAsyncError(async (req, res, next) => {
   if (!product) {
     return next(new ErrorHandler('Product Not Found', 200));
   }
+  const newProduct = {
+    id: product._id,
+    name: product.name,
+    price: product.price,
+    rating: product.rating,
+    numberOfReviews: product.numberOfReviews,
+    images: product.images,
+    colors: product.colors,
+    sizes: product.sizes,
+    company: product.company,
+    description: product.description,
+    category: product.category,
+    stock: product.stock,
+    shipping: product.shipping,
+  }
+
   res.status(200).json({
     success: true,
-    data: product,
+    data: newProduct,
   });
 });
 
@@ -139,6 +178,7 @@ exports.createProductReview = catchAsyncError(async (req, res, next) => {
     email,
     rating: Number(rating),
     comment,
+    createdAt: new Date()
   };
   const product = await Product.findById(productId);
   // check if the user already reviewed
@@ -151,6 +191,7 @@ exports.createProductReview = catchAsyncError(async (req, res, next) => {
         rev.name = name;
         rev.rating = rating;
         rev.comment = comment;
+        rev.createdAt = new Date()
       }
     });
   } else {
@@ -178,7 +219,9 @@ exports.getAllReviews = catchAsyncError(async (req, res, next) => {
   if (!req.params.id) {
     return next(new ErrorHandler('Product not found', 400));
   }
-  const product = await Product.findById(req.params.id);
+  const product = await Product.findById(req.params.id).sort({
+    createdAt: -1
+  });
   if (!product) {
     return next(new ErrorHandler('Product not found', 200));
   }

@@ -6,8 +6,7 @@ const catchAsyncError = require('../middleware/CatchAsyncErrors');
 // create new order
 exports.createNewOrder = catchAsyncError(async (req, res, next) => {
   const {
-    name,
-    email,
+    user,
     shippingInfo,
     orderItems,
     paymentInfo,
@@ -16,16 +15,21 @@ exports.createNewOrder = catchAsyncError(async (req, res, next) => {
     shippingPrice,
     totalPrice,
   } = req.body;
+
   const order = await Order.create({
     shippingInfo,
     orderItems,
-    paymentInfo,
+    paymentInfo: {
+      ...paymentInfo,
+      status: 'pending', // payment status is always pending on creation. update on payment success (from payment gateway provider)
+    },
     itemsPrice,
     taxPrice,
     shippingPrice,
     totalPrice,
-    paidAt: Date.now(),
-    user: { name, email },
+    paidAt: null,
+    createdAt: new Date(),
+    user,
   });
   res.status(200).json({
     success: true,
@@ -54,7 +58,7 @@ exports.getUserOrders = catchAsyncError(async (req, res, next) => {
   if (!email) {
     return next(new ErrorHandler('Order not found', 400));
   }
-  const order = await Order.find({ 'user.email': email });
+  const order = await Order.find({ 'user.email': email }).sort({ createdAt: -1 });
   if (!order) {
     return next(new ErrorHandler('Order not found', 200));
   }
